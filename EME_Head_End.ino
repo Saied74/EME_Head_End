@@ -1,20 +1,39 @@
-/*Put some commments here*/
+/*EME Head End is designed to run on an Arduino Nano and work with a MKR ETH Shield
+Its functions are:
+1. Measure and report the temperature of the air in the cabinet
+2. Measure and report amplifier heatsink temperature
+3. Shut down the amplifier when temperature exceeds 66 deg C
+4. Report the amplifer shut down condition
+5. Reset the shut down condition
+6. Measure and report amplifier power output
+7. Monitor cabinet door status and report it
+*/
 
 #include <SPI.h>
 #include <Ethernet.h>
 
-byte mac[] = {}; //todo add mac address
-IPAddress ip(192, 168, 0, 78); //todo update ip address
-EthernetServer server(80);
-const int sspin = 10; //chip select pin
+//Static IP address will be used to keep the code size small
+byte mac[] = {}; //TODO MAC address from the Arduino ETH shield sticker
+IPAddress ip(192, 168, 0, 78); //somewhat arbitrary private MAC accress
+EthernetServer server(80); //port 80 is the default HTTP port
+const int sspin = 10; //D10 pin is the default Ethernet shield chip select pin
+
 
 const float scaleFactor = 5.0 / 1024.0;
 const float sixtySixC = 3.35;
-const int ampPin = 2;
-const int doorPin = 3;
+const int ampPin = 2; //amplifier on - off control TODO: determine the level
+const int doorPin = 3; //door open/close sensor LOW = open
 
 
 void setup() {
+  /* During set up, the condition of the serial port is not checked.  That enables attaching
+  a terminal to the Arduino for debugging and also continue to be able to operate without a
+  terminal attached.  The same is true of Ethernet hardware and cable.  It is checked, but it
+  does not stop operatoin.  The fault condition is reported to the terminal (which may or may not
+  be present.
+  */
+  
+  //standard serial and Ethernet start up procedure
   Serial.begin(9600);
   Ethernet.init(sspin);
   Ethernet.begin(mac, ip);
@@ -36,8 +55,9 @@ void setup() {
 }
 
 void loop() {
-  char reportText;
-  float reportValue;
+
+  char reportText; //text to be sent to the host based on the type of request
+  float reportValue; //value to be sent to the host based on the type of request
   
   int ampSensor = analogRead(A3);
   int sinkSensor = analogRead(A4);
@@ -57,13 +77,21 @@ void loop() {
 
   if (sinkTemp > sixtySixC) {
     digitalWrite(ampPin, LOW);
-    Serial.println("Amp too hot");
+    Serial.print("Amp too hot.  It is: ");
+    Serial.print(sinkTemp);
+    Serial.println(" Deg C");
   }
 
   int doorStatus = digitalRead(doorPin);
   if (doorStatus == LOW) {
     Serial.println("Door Open");
   }
+
+  /*The head end is polled by the base station on a regular basis.  When polled by the base
+  station (roughly every 2 seconds as of now), it provides the requested data to the base
+  station.  It is envisioned that the head end querries all the data, one at a time, in each
+  interval and displays them.  The base station can also command the head end to turn the
+  amplifier on and off*/
   
   // listen for incoming clients
   EthernetClient client = server.available();
@@ -71,6 +99,22 @@ void loop() {
     Serial.println("new client");
     // an http request ends with a blank line
     boolean currentLineIsBlank = true;
+    /*The queries and commands from the base have the form of ?q=x where ? signifies the start
+    of a query string, q signfiers that there is a query (or command) will follow the ?.  The 
+    queries and commands are:
+    a: provide air temperature
+    h: provide heatsink temperature
+    p: provide power level
+    t: turn on power amp
+    f: turn off power amp
+    */
+    /*request status keeps track of where the scanner is in the command sequence
+    0: idle state
+    1: ? detected
+    2: q detected
+    3: = detected - look for the command
+    4: command is obtained
+    */
     int requestStatus = 0;
     while (client.connected()) {
       if (client.available()) {
@@ -78,6 +122,8 @@ void loop() {
         Serial.write(c);
 
         //--------------------------- parsing the request ----------------------------------------
+        //this comes first so when detecting = increments statusRequest to 3, the next charachter
+        //is most likly the command or query charachter.
         
         if (requestStatus == 3) {
           switch (c) {
@@ -100,9 +146,14 @@ void loop() {
                 reportText = "Door is open";
               }
               requestStatus++;
-            case 'r': //reset power amp turn off
+            case 't': //turn on power amp
               digitalWrite(ampPin, HIGH);
               reportText = "Turned on power amp";
+              reportValue = 0.0;
+              requestStatus++;
+            case 'f':
+              digitalWrite(ampPin, LOW);
+              reportText = "Turned Off power amp";
               reportValue = 0.0;
               requestStatus++;
             default:
@@ -122,6 +173,10 @@ void loop() {
         }
 
         //----------------------------------------------------------------------------------------
+        /*TODO:  This section may have to be changed to report the results in the URL line to
+        make parsing it easier.  Since the connection is private using Ethernet over coaxial cable
+        between the headend and the base station, safety of the request is not an issue:
+       */
         // if you've gotten to the end of the line (received a newline
         // character) and the line is blank, the http request has ended,
         // so you can send a reply
