@@ -13,14 +13,15 @@ Its functions are:
 #include <Ethernet.h>
 
 //Static IP address will be used to keep the code size small
-byte mac[] = {}; //TODO MAC address from the Arduino ETH shield sticker
-IPAddress ip(192, 168, 0, 78); //somewhat arbitrary private MAC accress
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED}; //TODO MAC address from the Arduino ETH shield sticker
+IPAddress ip(192, 168, 0, 78); //somewhat arbitrary private IP accress
 EthernetServer server(80); //port 80 is the default HTTP port
 const int sspin = 10; //D10 pin is the default Ethernet shield chip select pin
 
 
-const float scaleFactor = 5.0 / 1024.0;
-const float sixtySixC = 3.35;
+const float powerFactor = (4.56 / 1024.0)*(5.0/250); //for converting A/D reads into power
+const float tempFactor = (4.56 / 1024) * 100.0; //for converting A/D reads to deg K
+const float ampThreshold = 66.0; //votage value for 66 degrees C temperature
 const int ampPin = 2; //amplifier on - off control TODO: determine the level
 const int doorPin = 3; //door open/close sensor LOW = open
 
@@ -30,7 +31,7 @@ void setup() {
   a terminal to the Arduino for debugging and also continue to be able to operate without a
   terminal attached.  The same is true of Ethernet hardware and cable.  It is checked, but it
   does not stop operatoin.  The fault condition is reported to the terminal (which may or may not
-  be present.
+  be present).  This will allow debugging if needed.
   */
   
   //standard serial and Ethernet start up procedure
@@ -57,25 +58,25 @@ void setup() {
 void loop() {
 
   char reportText; //text to be sent to the host based on the type of request
-  float reportValue; //value to be sent to the host based on the type of request
+  float reportValue; //value, if any, to be sent to the host based on the type of request
   
   int ampSensor = analogRead(A3);
-  int sinkSensor = analogRead(A4);
+  int sinkSensor = analogRead(A6);
   int airSensor = analogRead(A5);
 
-  float ampPower = ampSensor * scaleFactor;
-  float sinkTemp = sinkSensor * scaleFactor;
-  float airTemp = airSensor * scaleFactor;
+  float ampPower = ampSensor * powerFactor;
+  float sinkTemp = sinkSensor * tempFactor - 273.15;
+  float airTemp = airSensor * tempFactor - 273.15;
 
   Serial.println();
-  Serial.print("Amp Power: ");
+  Serial.print("Amp Power (Watts): ");
   Serial.println(ampPower);
-  Serial.print("Heatsink Temperature: ");
+  Serial.print("Heatsink Temperature (deg C): ");
   Serial.println(sinkTemp);
-  Serial.print("Air Temperature: ");
+  Serial.print("Air Temperature (deg C): ");
   Serial.println(airTemp);
 
-  if (sinkTemp > sixtySixC) {
+  if (sinkTemp > ampThreshold) {
     digitalWrite(ampPin, LOW);
     Serial.print("Amp too hot.  It is: ");
     Serial.print(sinkTemp);
