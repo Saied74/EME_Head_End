@@ -20,8 +20,8 @@ const int sspin = 10; //D10 pin is the default Ethernet shield chip select pin
 const int sdpin = 9; //D9 pin is chip select for SD Card
 
 
-const float powerFactor = (4.56 / 1024.0)*(250.0/5.0); //for converting A/D reads into power
-const float tempFactor = (4.56 / 1024) * 100.0; //for converting A/D reads to deg K
+const float powerFactor = (4.96 / 1024.0)*(250.0/5.0); //for converting A/D reads into power
+const float tempFactor = (4.96 / 1024) * 100.0; //for converting A/D reads to deg K
 const float ampThreshold = 66.0; //votage value for 66 degrees C temperature
 const int ampPin = 2; //amplifier on - off control TODO: determine the level
 const int doorPin = 3; //door open/close sensor LOW = open
@@ -62,9 +62,8 @@ void setup() {
 
   pinMode(ampPin, OUTPUT); //Amp enable
   pinMode(doorPin, INPUT);  //Door sensor
- 
   
-  
+ digitalWrite(ampPin, HIGH);
 }
 
 void loop() {
@@ -139,13 +138,13 @@ void loop() {
               requestStatus++;
               break;
             case 't': //turn on power amp
-              digitalWrite(ampPin, HIGH);
+              digitalWrite(ampPin, LOW);
               ampStatus = "On";
               reportText = "nothing=nothing";//to pacify the error handler on the other side
               requestStatus++;
                break;
             case 'f':
-              digitalWrite(ampPin, LOW);
+              digitalWrite(ampPin, HIGH);
               ampStatus = "Off";
               reportText = "nothing=nothing"; //to pacify the error handler on the other side
               requestStatus++;
